@@ -1,7 +1,7 @@
 use bevy::math::vec2;
 use bevy::prelude::*;
-use bevy_egui::egui;
-use bevy_egui::egui::Rounding;
+use bevy_egui::egui::CornerRadius;
+use bevy_egui::egui::{self};
 use bevy_egui::EguiContext;
 
 use crate::core::DEFAULT_MAX_BLUR_REGIONS_COUNT;
@@ -86,8 +86,8 @@ fn get_egui_blur_rect<R>(
     window: egui::Window<'_>,
     ctx: &egui::Context,
     add_contents: impl FnOnce(&mut egui::Ui) -> R,
-) -> Option<(egui::InnerResponse<Option<R>>, Rect, egui::Rounding)> {
-    let mut rounding = egui::Rounding::ZERO;
+) -> Option<(egui::InnerResponse<Option<R>>, Rect, egui::CornerRadius)> {
+    let mut rounding = egui::CornerRadius::ZERO;
 
     let Some(response) = window.show(ctx, |ui| {
         // When drawing a window, the frame for that window can be found on the UiStack of the grandparent of the current UiStack
@@ -96,8 +96,8 @@ fn get_egui_blur_rect<R>(
             .parent
             .as_ref()
             .and_then(|s| s.parent.as_ref())
-            .map(|s| s.frame().rounding)
-            .unwrap_or(Rounding::ZERO);
+            .map(|s| s.frame().corner_radius)
+            .unwrap_or(CornerRadius::ZERO);
         add_contents(ui)
     }) else {
         return None;
@@ -132,12 +132,20 @@ impl<'open> EguiWindowBlurExt for egui::Window<'open> {
         ctx: &egui::Context,
         add_contents: impl FnOnce(&mut egui::Ui) -> R,
     ) -> Option<egui::InnerResponse<Option<R>>> {
-        let (response, blur_rect, rounding) = get_egui_blur_rect(self, ctx, add_contents)?;
+        let (response, blur_rect, corner_radius) = get_egui_blur_rect(self, ctx, add_contents)?;
 
         ctx.memory_mut(|mem| {
             let egui_blur_regions: &mut EguiBlurRegions<N> = mem.data.get_temp_mut_or_default(egui::Id::NULL);
             egui_blur_regions.target = EguiBlurTarget::DefaultCamera;
-            egui_blur_regions.blur(blur_rect, Vec4::new(rounding.nw, rounding.ne, rounding.se, rounding.sw));
+            egui_blur_regions.blur(
+                blur_rect,
+                Vec4::new(
+                    corner_radius.nw.into(),
+                    corner_radius.ne.into(),
+                    corner_radius.se.into(),
+                    corner_radius.sw.into(),
+                ),
+            );
         });
 
         Some(response)
@@ -158,12 +166,20 @@ impl<'open> EguiWindowBlurExt for egui::Window<'open> {
         ctx: &egui::Context,
         add_contents: impl FnOnce(&mut egui::Ui) -> R,
     ) -> Option<egui::InnerResponse<Option<R>>> {
-        let (response, blur_rect, rounding) = get_egui_blur_rect(self, ctx, add_contents)?;
+        let (response, blur_rect, corner_radius) = get_egui_blur_rect(self, ctx, add_contents)?;
 
         ctx.memory_mut(|mem| {
             let egui_blur_regions: &mut EguiBlurRegions<N> = mem.data.get_temp_mut_or_default(egui::Id::NULL);
             egui_blur_regions.target = EguiBlurTarget::Entity(camera_entity);
-            egui_blur_regions.blur(blur_rect, Vec4::new(rounding.nw, rounding.ne, rounding.se, rounding.sw));
+            egui_blur_regions.blur(
+                blur_rect,
+                Vec4::new(
+                    corner_radius.nw.into(),
+                    corner_radius.ne.into(),
+                    corner_radius.se.into(),
+                    corner_radius.sw.into(),
+                ),
+            );
         });
 
         Some(response)

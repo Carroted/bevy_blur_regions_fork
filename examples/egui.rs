@@ -23,10 +23,8 @@ fn main() {
 fn setup(mut commands: Commands) {
     commands.spawn((
         DefaultBlurRegionsCamera::default(),
-        Camera3dBundle {
-            transform: Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
-            ..default()
-        },
+        Camera3d::default(),
+        Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 }
 
@@ -38,7 +36,7 @@ fn update(
 
     let frame = egui::Frame::window(&contexts.ctx_mut().style())
         .fill(egui::Color32::from_rgba_premultiplied(27, 27, 27, 100))
-        .rounding(0.0)
+        .corner_radius(0.0)
         .shadow(egui::epaint::Shadow::NONE);
 
     egui::Window::new("Blur").frame(frame).show_with_blur(contexts.ctx_mut(), |ui| {

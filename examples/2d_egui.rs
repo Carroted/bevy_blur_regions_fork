@@ -21,7 +21,7 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    commands.spawn((Camera2dBundle::default(), DefaultBlurRegionsCamera::default()));
+    commands.spawn((Camera2d::default(), DefaultBlurRegionsCamera::default()));
 }
 
 fn update(
@@ -32,7 +32,7 @@ fn update(
 
     let frame = egui::Frame::window(&contexts.ctx_mut().style())
         .fill(egui::Color32::from_white_alpha(10))
-        .rounding(10.0)
+        .corner_radius(10.0)
         .shadow(egui::epaint::Shadow::NONE);
 
     egui::Window::new("Blur").frame(frame).title_bar(false).resizable(false).show_with_blur(contexts.ctx_mut(), |ui| {
