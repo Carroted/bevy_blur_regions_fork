@@ -82,6 +82,34 @@ pub trait EguiWindowBlurExt {
     ) -> Option<egui::InnerResponse<Option<R>>>;
 }
 
+pub trait EguiAreaBlurExt {
+    fn show_with_blur<R>(
+        self,
+        ctx: &egui::Context,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> Option<egui::InnerResponse<R>>;
+
+    fn show_with_blur_n<R, const N: usize>(
+        self,
+        ctx: &egui::Context,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> Option<egui::InnerResponse<R>>;
+
+    fn show_with_blur_on_camera<R>(
+        self,
+        camera_entity: Entity,
+        ctx: &egui::Context,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> Option<egui::InnerResponse<R>>;
+
+    fn show_with_blur_on_camera_n<R, const N: usize>(
+        self,
+        camera_entity: Entity,
+        ctx: &egui::Context,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> Option<egui::InnerResponse<R>>;
+}
+
 fn get_egui_blur_rect<R>(
     window: egui::Window<'_>,
     ctx: &egui::Context,
@@ -102,6 +130,40 @@ fn get_egui_blur_rect<R>(
     }) else {
         return None;
     };
+
+    // egui appears to be painting one frame before bevy, so in order to ensure that the blur
+    // is positioned exactly behind the window we need to ideally look at where the window was
+    // one frame ago.
+    let egui_rect =
+        ctx.memory(|memory| memory.area_rect(response.response.layer_id.id)).unwrap_or(response.response.rect);
+
+    let scale_factor = ctx.options(|op| op.zoom_factor);
+    let min = vec2(egui_rect.min.x, egui_rect.min.y) * scale_factor;
+    let max = vec2(egui_rect.max.x, egui_rect.max.y) * scale_factor;
+
+    rounding = rounding * scale_factor;
+
+    Some((response, Rect::from_corners(min, max), rounding))
+}
+
+fn get_egui_blur_rect_area<R>(
+    window: egui::Area,
+    ctx: &egui::Context,
+    add_contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> Option<(egui::InnerResponse<R>, Rect, egui::CornerRadius)> {
+    let mut rounding = egui::CornerRadius::ZERO;
+
+    let response = window.show(ctx, |ui| {
+        // When drawing a window, the frame for that window can be found on the UiStack of the grandparent of the current UiStack
+        rounding = ui
+            .stack()
+            .parent
+            .as_ref()
+            .and_then(|s| s.parent.as_ref())
+            .map(|s| s.frame().corner_radius)
+            .unwrap_or(CornerRadius::ZERO);
+        add_contents(ui)
+    });
 
     // egui appears to be painting one frame before bevy, so in order to ensure that the blur
     // is positioned exactly behind the window we need to ideally look at where the window was
@@ -167,6 +229,74 @@ impl<'open> EguiWindowBlurExt for egui::Window<'open> {
         add_contents: impl FnOnce(&mut egui::Ui) -> R,
     ) -> Option<egui::InnerResponse<Option<R>>> {
         let (response, blur_rect, corner_radius) = get_egui_blur_rect(self, ctx, add_contents)?;
+
+        ctx.memory_mut(|mem| {
+            let egui_blur_regions: &mut EguiBlurRegions<N> = mem.data.get_temp_mut_or_default(egui::Id::NULL);
+            egui_blur_regions.target = EguiBlurTarget::Entity(camera_entity);
+            egui_blur_regions.blur(
+                blur_rect,
+                Vec4::new(
+                    corner_radius.nw.into(),
+                    corner_radius.ne.into(),
+                    corner_radius.se.into(),
+                    corner_radius.sw.into(),
+                ),
+            );
+        });
+
+        Some(response)
+    }
+}
+
+impl EguiAreaBlurExt for egui::Area {
+    fn show_with_blur<R>(
+        self,
+        ctx: &egui::Context,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> Option<egui::InnerResponse<R>> {
+        self.show_with_blur_n::<R, DEFAULT_MAX_BLUR_REGIONS_COUNT>(ctx, add_contents)
+    }
+
+    fn show_with_blur_n<R, const N: usize>(
+        self,
+        ctx: &egui::Context,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> Option<egui::InnerResponse<R>> {
+        let (response, blur_rect, corner_radius) = get_egui_blur_rect_area(self, ctx, add_contents)?;
+
+        ctx.memory_mut(|mem| {
+            let egui_blur_regions: &mut EguiBlurRegions<N> = mem.data.get_temp_mut_or_default(egui::Id::NULL);
+            egui_blur_regions.target = EguiBlurTarget::DefaultCamera;
+            egui_blur_regions.blur(
+                blur_rect,
+                Vec4::new(
+                    corner_radius.nw.into(),
+                    corner_radius.ne.into(),
+                    corner_radius.se.into(),
+                    corner_radius.sw.into(),
+                ),
+            );
+        });
+
+        Some(response)
+    }
+
+    fn show_with_blur_on_camera<R>(
+        self,
+        camera_entity: Entity,
+        ctx: &egui::Context,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> Option<egui::InnerResponse<R>> {
+        self.show_with_blur_on_camera_n::<R, DEFAULT_MAX_BLUR_REGIONS_COUNT>(camera_entity, ctx, add_contents)
+    }
+
+    fn show_with_blur_on_camera_n<R, const N: usize>(
+        self,
+        camera_entity: Entity,
+        ctx: &egui::Context,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> Option<egui::InnerResponse<R>> {
+        let (response, blur_rect, corner_radius) = get_egui_blur_rect_area(self, ctx, add_contents)?;
 
         ctx.memory_mut(|mem| {
             let egui_blur_regions: &mut EguiBlurRegions<N> = mem.data.get_temp_mut_or_default(egui::Id::NULL);
